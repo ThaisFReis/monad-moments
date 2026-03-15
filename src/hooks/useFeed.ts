@@ -51,9 +51,10 @@ export function useFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const cursorRef = useRef<number | null>(null); // next tokenId to fetch (descending)
+  const [hasMore, setHasMore] = useState(false);
+  const cursorRef = useRef<number | null>(null);
 
-  const fetchPage = useCallback(async (startTokenId: number, supply: number) => {
+  const fetchPage = useCallback(async (startTokenId: number) => {
     if (!publicClient) return [];
 
     // Token IDs are 0-based: valid range is [0, supply-1]
@@ -98,20 +99,20 @@ export function useFeed() {
     // Fetch IPFS metadata in parallel
     const metadataResults = await Promise.all(
       baseItems.map((item) =>
-        item.contentURI ? fetchMetadata(item.contentURI, item.tokenId) : { imageUrl: null, title: `Moment #${item.tokenId.toString()}`, description: '' }
+        item.contentURI
+          ? fetchMetadata(item.contentURI, item.tokenId)
+          : { imageUrl: null, title: `Moment #${item.tokenId.toString()}`, description: '' }
       )
     );
 
-    const items: MomentItem[] = baseItems.map((item, i) => ({
+    return baseItems.map((item, i) => ({
       ...item,
       mediaUrl: item.contentURI ? resolveContentURI(item.contentURI) : '',
       imageUrl: metadataResults[i].imageUrl,
       title: metadataResults[i].title,
       description: metadataResults[i].description,
       txHash: null,
-    }));
-
-    return items;
+    })) as MomentItem[];
   }, [publicClient]);
 
   const fetchMoments = useCallback(async () => {
@@ -121,7 +122,6 @@ export function useFeed() {
       setLoading(true);
       setError(null);
 
-      // 1 RPC call: get total supply
       const supply = await publicClient.readContract({
         address: MOMENT_NFT_ADDRESS,
         abi: MOMENT_NFT_ABI,
@@ -134,17 +134,20 @@ export function useFeed() {
       if (supplyNum === 0) {
         setMoments([]);
         cursorRef.current = null;
+        setHasMore(false);
         return;
       }
 
       // Token IDs are 0-based: last minted token is supplyNum - 1
       const lastTokenId = supplyNum - 1;
-      const items = await fetchPage(lastTokenId, supplyNum);
+      const items = await fetchPage(lastTokenId);
       setMoments(items);
 
-      // Next cursor: the token ID below the lowest one we fetched
+      // Next cursor: token ID below the lowest one we fetched
       const lowestFetched = lastTokenId - items.length + 1;
-      cursorRef.current = lowestFetched > 0 ? lowestFetched - 1 : null;
+      const nextCursor = lowestFetched > 0 ? lowestFetched - 1 : null;
+      cursorRef.current = nextCursor;
+      setHasMore(nextCursor !== null && nextCursor >= 0);
     } catch (err) {
       console.error('Failed to fetch feed:', err);
       setError('Failed to load feed');
@@ -158,23 +161,23 @@ export function useFeed() {
 
     try {
       setLoadingMore(true);
-      const items = await fetchPage(cursorRef.current, total);
+      const items = await fetchPage(cursorRef.current);
       setMoments((prev) => [...prev, ...items]);
 
       const lowestFetched = cursorRef.current - items.length + 1;
-      cursorRef.current = lowestFetched > 0 ? lowestFetched - 1 : null;
+      const nextCursor = lowestFetched > 0 ? lowestFetched - 1 : null;
+      cursorRef.current = nextCursor;
+      setHasMore(nextCursor !== null && nextCursor >= 0);
     } catch (err) {
       console.error('Failed to load more:', err);
     } finally {
       setLoadingMore(false);
     }
-  }, [publicClient, loadingMore, fetchPage, total]);
+  }, [publicClient, loadingMore, fetchPage]);
 
   useEffect(() => {
     fetchMoments();
   }, [fetchMoments]);
-
-  const hasMore = cursorRef.current !== null && cursorRef.current >= 0;
 
   return {
     moments,
