@@ -10,18 +10,50 @@ interface MomentCardProps {
   variant?: 'grid' | 'list';
 }
 
+interface MediaProps {
+  src: string;
+  isVideo: boolean;
+  className: string;
+  onError: () => void;
+  loading?: 'lazy' | 'eager';
+}
+
+function Media({ src, isVideo, className, onError, loading = 'lazy' }: MediaProps) {
+  if (isVideo) {
+    return (
+      <video
+        src={src}
+        className={className}
+        autoPlay
+        muted
+        loop
+        playsInline
+        onError={onError}
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      className={className}
+      onError={onError}
+      loading={loading}
+      alt=""
+    />
+  );
+}
+
 export function MomentCard({
   moment,
   variant = 'grid',
 }: MomentCardProps) {
-  const imageUrl = moment.imageUrl;
-  const title = moment.title;
-  const description = moment.description;
-  const [imgLoadError, setImgLoadError] = useState(false);
+  const { imageUrl, title, description, mediaType } = moment;
+  const isVideo = mediaType === 'video';
+  const [mediaLoadError, setMediaLoadError] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const hasImage = !!imageUrl && !imgLoadError;
-  const showError = !imageUrl || imgLoadError;
+  const hasMedia = !!imageUrl && !mediaLoadError;
+  const showError = !imageUrl || mediaLoadError;
 
   const dateLabel = new Date(moment.timestamp * 1000)
     .toLocaleDateString('en-GB', {
@@ -38,12 +70,12 @@ export function MomentCard({
           onClick={() => setExpanded(true)}
           className="aspect-square relative bg-monad-card overflow-hidden group cursor-pointer"
         >
-          {hasImage && (
-            <img
-              src={imageUrl}
-              alt={title}
+          {hasMedia && (
+            <Media
+              src={imageUrl!}
+              isVideo={isVideo}
               className="w-full h-full object-cover grayscale opacity-85 group-hover:grayscale-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
-              onError={() => setImgLoadError(true)}
+              onError={() => setMediaLoadError(true)}
               loading="lazy"
             />
           )}
@@ -75,12 +107,12 @@ export function MomentCard({
           </h2>
 
           <div className="relative aspect-[4/5] bg-monad-card overflow-hidden border border-monad-border rounded-[24px]">
-            {hasImage && (
-              <img
-                src={imageUrl}
+            {hasMedia && (
+              <Media
+                src={imageUrl!}
+                isVideo={isVideo}
                 className="w-full h-full object-cover grayscale opacity-90 group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700"
-                alt={title}
-                onError={() => setImgLoadError(true)}
+                onError={() => setMediaLoadError(true)}
               />
             )}
 
@@ -132,11 +164,13 @@ export function MomentCard({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="aspect-square rounded-[32px] overflow-hidden bg-monad-card border border-monad-border mb-6 relative">
-              {hasImage && (
-                <img
-                  src={imageUrl}
+              {hasMedia && (
+                <Media
+                  src={imageUrl!}
+                  isVideo={isVideo}
                   className="w-full h-full object-cover"
-                  alt={title}
+                  onError={() => setMediaLoadError(true)}
+                  loading="eager"
                 />
               )}
 

@@ -13,32 +13,53 @@ export interface MomentItem {
   contentURI: string;
   mediaUrl: string;
   imageUrl: string | null;
+  mediaType: 'photo' | 'video';
   title: string;
   description: string;
   timestamp: number;
   txHash: string | null;
 }
 
-// Module-level cache so metadata survives re-renders and refetches
-const metadataCache = new Map<string, { imageUrl: string | null; title: string; description: string }>();
+type MetadataResult = { imageUrl: string | null; mediaType: 'photo' | 'video'; title: string; description: string };
 
-async function fetchMetadata(contentURI: string, tokenId: bigint) {
+// Module-level cache so metadata survives re-renders and refetches
+const metadataCache = new Map<string, MetadataResult>();
+
+async function fetchMetadata(contentURI: string, tokenId: bigint): Promise<MetadataResult> {
   if (metadataCache.has(contentURI)) return metadataCache.get(contentURI)!;
+
+  const defaultTitle = `Moment #${tokenId.toString()}`;
 
   try {
     const url = resolveContentURI(contentURI);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const contentType = res.headers.get('content-type') ?? '';
+
+    // Non-JSON CID: the contentURI is the media itself (legacy mints pre-metadata pipeline)
+    if (!contentType.includes('json')) {
+      const isVideo = contentType.startsWith('video/');
+      const result: MetadataResult = { imageUrl: url, mediaType: isVideo ? 'video' : 'photo', title: defaultTitle, description: '' };
+      metadataCache.set(contentURI, result);
+      return result;
+    }
+
     const data = await res.json();
-    const result = {
+    const typeAttr = (data.attributes as Array<{ trait_type: string; value: string }> | undefined)
+      ?.find((a) => a.trait_type === 'Type')?.value;
+    const mediaType: 'photo' | 'video' = typeAttr === 'video' ? 'video' : 'photo';
+
+    const result: MetadataResult = {
       imageUrl: data.image ? resolveContentURI(data.image) : null,
-      title: data.name || `Moment #${tokenId.toString()}`,
+      mediaType,
+      title: data.name || defaultTitle,
       description: data.description || '',
     };
     metadataCache.set(contentURI, result);
     return result;
   } catch {
-    const fallback = { imageUrl: null, title: `Moment #${tokenId.toString()}`, description: '' };
+    const fallback: MetadataResult = { imageUrl: null, mediaType: 'photo', title: defaultTitle, description: '' };
     metadataCache.set(contentURI, fallback);
     return fallback;
   }
@@ -109,6 +130,7 @@ export function useFeed() {
       ...item,
       mediaUrl: item.contentURI ? resolveContentURI(item.contentURI) : '',
       imageUrl: metadataResults[i].imageUrl,
+      mediaType: metadataResults[i].mediaType,
       title: metadataResults[i].title,
       description: metadataResults[i].description,
       txHash: null,
