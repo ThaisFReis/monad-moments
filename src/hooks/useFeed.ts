@@ -122,7 +122,7 @@ export function useFeed() {
       baseItems.map((item) =>
         item.contentURI
           ? fetchMetadata(item.contentURI, item.tokenId)
-          : { imageUrl: null, title: `Moment #${item.tokenId.toString()}`, description: '' }
+          : { imageUrl: null, mediaType: 'photo' as const, title: `Moment #${item.tokenId.toString()}`, description: '' }
       )
     );
 
