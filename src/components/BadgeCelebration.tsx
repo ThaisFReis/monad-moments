@@ -24,12 +24,10 @@ export function BadgeCelebration({
     if (show && !hasConfettiFired.current) {
       hasConfettiFired.current = true;
 
-      // Dynamic import confetti to avoid SSR issues
       import('canvas-confetti').then((confetti) => {
         const duration = 2500;
         const end = Date.now() + duration;
-
-        const colors = ['#836EF9', '#E040FB', '#00E5FF', '#00E676', '#FFD700'];
+        const colors = ['#FF4500', '#FF7A00', '#F5F5F5'];
 
         const frame = () => {
           confetti.default({
@@ -64,71 +62,77 @@ export function BadgeCelebration({
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] bg-monad-bg/95 backdrop-blur-xl flex flex-col items-center justify-center animate-fade-in">
-      {/* Badge icon */}
-      <div className="animate-badge-reveal mb-6">
-        <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-monad-purple via-monad-fuchsia to-monad-accent p-[3px]">
-          <div className="w-full h-full rounded-3xl bg-monad-bg flex flex-col items-center justify-center gap-1">
-            <span className="text-5xl">
-              {earnedBadge ? '🎪' : '📸'}
-            </span>
-            <span className="text-monad-text text-xs font-bold font-display">
-              {earnedBadge ? 'EVENT' : 'MINTED'}
-            </span>
+    <div className="fixed inset-0 z-[70] bg-monad-purple text-monad-text flex flex-col p-8 animate-slide-up">
+      <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] opacity-80 mb-6">
+          {earnedBadge ? 'Artifact issued' : 'Record anchored'}
+        </p>
+        <h2 className="font-display text-7xl italic leading-[0.9] mb-8">
+          {earnedBadge ? (
+            <>
+              Badge
+              <br />
+              Earned.
+            </>
+          ) : (
+            <>
+              Moment
+              <br />
+              Minted.
+            </>
+          )}
+        </h2>
+
+        <div className="space-y-5">
+          {tokenId !== null && (
+            <div className="p-4 border border-white/20 rounded-[20px] flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full border border-white/30 flex items-center justify-center text-xl">
+                {earnedBadge ? '◌' : '●'}
+              </div>
+              <div>
+                <span className="font-mono text-[10px] uppercase tracking-[0.24em] opacity-80 block mb-1">
+                  Token record
+                </span>
+                <span className="font-mono text-sm tracking-[0.18em]">
+                  MOMENT #{tokenId.toString()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 bg-black/20 border border-white/30 rounded-[20px] backdrop-blur-sm flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full border border-white/30 flex items-center justify-center text-xl">
+              {earnedBadge ? '⌘' : '↗'}
+            </div>
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] opacity-80 block mb-1">
+                {earnedBadge ? 'Event recorded' : 'Monad finalized'}
+              </span>
+              <span className="font-mono text-sm tracking-[0.18em]">
+                {earnedBadge ? HACKATHON_EVENT.name.toUpperCase() : 'SUB-SECOND CONFIRMATION'}
+              </span>
+            </div>
           </div>
         </div>
+
+        {txHash && (
+          <a
+            href={`https://testnet.monadexplorer.com/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-8 font-mono text-[10px] uppercase tracking-[0.24em] text-white/80"
+          >
+            View on explorer ↗
+          </a>
+        )}
       </div>
 
-      {/* Title */}
-      <h2 className="text-monad-text text-2xl font-display font-bold mb-2 animate-slide-up">
-        {earnedBadge ? 'Badge Earned!' : 'Moment Minted!'}
-      </h2>
-
-      {/* Subtitle */}
-      <p className="text-monad-muted text-center text-sm max-w-[280px] mb-2 animate-slide-up"
-        style={{ animationDelay: '100ms' }}
-      >
-        {earnedBadge
-          ? `You earned the ${HACKATHON_EVENT.name} Attendee badge!`
-          : 'Your moment is permanently stored on Monad.'}
-      </p>
-
-      {/* Token ID */}
-      {tokenId !== null && (
-        <div
-          className="mt-2 px-4 py-2 rounded-xl bg-monad-card border border-monad-border animate-slide-up"
-          style={{ animationDelay: '200ms' }}
-        >
-          <span className="text-monad-muted text-xs">Moment #</span>
-          <span className="text-monad-accent text-sm font-mono font-bold ml-1">
-            {tokenId.toString()}
-          </span>
-        </div>
-      )}
-
-      {/* Explorer link */}
-      {txHash && (
-        <a
-          href={`https://testnet.monadexplorer.com/tx/${txHash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 text-monad-accent text-xs font-mono hover:underline animate-slide-up"
-          style={{ animationDelay: '300ms' }}
-        >
-          View on Monad Explorer →
-        </a>
-      )}
-
-      {/* Close / go to feed */}
-      <div
-        className="flex gap-3 mt-8 animate-slide-up"
-        style={{ animationDelay: '400ms' }}
-      >
+      <div className="max-w-md mx-auto w-full pb-8">
         <button
           onClick={onClose}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-monad-purple to-monad-fuchsia text-white font-semibold hover:opacity-90 transition-opacity"
+          className="w-full py-5 rounded-full bg-white text-monad-purple font-mono text-xs uppercase tracking-[0.24em] flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-2xl"
         >
-          View Feed
+          View archive
         </button>
       </div>
     </div>

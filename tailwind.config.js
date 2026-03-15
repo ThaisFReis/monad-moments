@@ -5,22 +5,22 @@ module.exports = {
     extend: {
       colors: {
         monad: {
-          bg: '#0a0a12',
-          surface: '#13131f',
-          card: '#1a1a2e',
-          border: '#2a2a45',
-          purple: '#836EF9',
-          fuchsia: '#E040FB',
-          accent: '#00E5FF',
+          bg: '#0a0a0a',
+          surface: '#101010',
+          card: '#171717',
+          border: '#262626',
+          purple: '#FF4500',
+          fuchsia: '#FF7A00',
+          accent: '#F5F5F5',
           success: '#00E676',
-          text: '#E8E8F0',
-          muted: '#8888AA',
+          text: '#F5F5F5',
+          muted: '#737373',
         },
       },
       fontFamily: {
-        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
-        body: ['DM Sans', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Instrument Serif', 'serif'],
+        body: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['Space Mono', 'monospace'],
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
@@ -31,8 +31,8 @@ module.exports = {
       },
       keyframes: {
         'pulse-glow': {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(131, 110, 249, 0.3)' },
-          '50%': { boxShadow: '0 0 40px rgba(224, 64, 251, 0.5)' },
+          '0%, 100%': { boxShadow: '0 0 18px rgba(255, 69, 0, 0.22)' },
+          '50%': { boxShadow: '0 0 36px rgba(255, 69, 0, 0.42)' },
         },
         'slide-up': {
           from: { transform: 'translateY(20px)', opacity: '0' },

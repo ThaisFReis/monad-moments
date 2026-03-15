@@ -139,7 +139,7 @@ cp .env.example .env.local
 Fill in your values:
 ```
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_id_here
-NEXT_PUBLIC_PINATA_JWT=your_jwt_here
+PINATA_JWT=your_jwt_here
 NEXT_PUBLIC_PINATA_GATEWAY=your-gateway.mypinata.cloud
 NEXT_PUBLIC_MONAD_RPC=https://testnet-rpc.monad.xyz
 ```
@@ -158,8 +158,11 @@ forge create contracts/MomentNFT.sol:MomentNFT \
 ```
 
 Copy the deployed address and add to `.env.local`:
+
+> **Already deployed:** `0xe389AB80e846F5640483Be330Dc2491d4E488EEd` (Monad Testnet, 2026-03-15)
+> Tx: `0x9fd7e50b2bb69636655d07322b42662a20ac2b93e9d8fae7a4f3a21c9d329c81`
 ```
-NEXT_PUBLIC_MOMENT_NFT_ADDRESS=0xYOUR_DEPLOYED_ADDRESS
+NEXT_PUBLIC_MOMENT_NFT_ADDRESS=0xe389AB80e846F5640483Be330Dc2491d4E488EEd
 ```
 
 ### 4. Run the app

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -23,6 +23,11 @@
     overflow-x: hidden;
   }
 
+  ::selection {
+    background: rgba(255, 69, 0, 0.28);
+    color: #fff;
+  }
+
   /* Hide scrollbar but keep scrolling */
   ::-webkit-scrollbar {
     width: 0;
@@ -43,6 +48,14 @@
   /* Gradient text */
   .gradient-text {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-monad-purple to-monad-fuchsia;
+  }
+
+  .font-editorial {
+    @apply font-display italic;
+  }
+
+  .font-technical {
+    @apply font-mono uppercase tracking-[0.28em];
   }
 
   /* Glass effect */

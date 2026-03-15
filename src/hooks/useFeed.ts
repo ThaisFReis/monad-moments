@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePublicClient } from 'wagmi';
 import { MOMENT_NFT_ABI, MOMENT_NFT_ADDRESS, resolveContentURI } from '@/config/contracts';
-import { parseAbiItem } from 'viem';
+
+const PAGE_SIZE = 10;
 
 export interface MomentItem {
   tokenId: bigint;
@@ -11,15 +12,107 @@ export interface MomentItem {
   dayId: number;
   contentURI: string;
   mediaUrl: string;
+  imageUrl: string | null;
+  title: string;
+  description: string;
   timestamp: number;
-  txHash: string;
+  txHash: string | null;
+}
+
+// Module-level cache so metadata survives re-renders and refetches
+const metadataCache = new Map<string, { imageUrl: string | null; title: string; description: string }>();
+
+async function fetchMetadata(contentURI: string, tokenId: bigint) {
+  if (metadataCache.has(contentURI)) return metadataCache.get(contentURI)!;
+
+  try {
+    const url = resolveContentURI(contentURI);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const result = {
+      imageUrl: data.image ? resolveContentURI(data.image) : null,
+      title: data.name || `Moment #${tokenId.toString()}`,
+      description: data.description || '',
+    };
+    metadataCache.set(contentURI, result);
+    return result;
+  } catch {
+    const fallback = { imageUrl: null, title: `Moment #${tokenId.toString()}`, description: '' };
+    metadataCache.set(contentURI, fallback);
+    return fallback;
+  }
 }
 
 export function useFeed() {
   const publicClient = usePublicClient();
   const [moments, setMoments] = useState<MomentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const cursorRef = useRef<number | null>(null); // next tokenId to fetch (descending)
+
+  const fetchPage = useCallback(async (startTokenId: number, supply: number) => {
+    if (!publicClient) return [];
+
+    // Token IDs are 0-based: valid range is [0, supply-1]
+    // startTokenId is the highest token ID to include in this page
+    const endTokenId = Math.max(0, startTokenId - PAGE_SIZE + 1);
+    const tokenIds: number[] = [];
+    for (let id = startTokenId; id >= endTokenId; id--) {
+      tokenIds.push(id);
+    }
+
+    if (tokenIds.length === 0) return [];
+
+    // Parallel readContract calls (Monad testnet has no multicall3)
+    const readCall = (functionName: 'tokenURI' | 'ownerOf' | 'getDayId', tokenId: bigint) =>
+      publicClient.readContract({
+        address: MOMENT_NFT_ADDRESS,
+        abi: MOMENT_NFT_ABI,
+        functionName,
+        args: [tokenId],
+      }).catch(() => null);
+
+    const baseItems = await Promise.all(
+      tokenIds.map(async (id) => {
+        const tokenId = BigInt(id);
+        const [contentURI, owner, dayId] = await Promise.all([
+          readCall('tokenURI', tokenId) as Promise<string | null>,
+          readCall('ownerOf', tokenId) as Promise<string | null>,
+          readCall('getDayId', tokenId) as Promise<number | null>,
+        ]);
+
+        const dayNum = Number(dayId ?? 0);
+        return {
+          tokenId,
+          owner: owner ?? '0x0',
+          dayId: dayNum,
+          contentURI: contentURI ?? '',
+          timestamp: dayNum * 86400,
+        };
+      })
+    );
+
+    // Fetch IPFS metadata in parallel
+    const metadataResults = await Promise.all(
+      baseItems.map((item) =>
+        item.contentURI ? fetchMetadata(item.contentURI, item.tokenId) : { imageUrl: null, title: `Moment #${item.tokenId.toString()}`, description: '' }
+      )
+    );
+
+    const items: MomentItem[] = baseItems.map((item, i) => ({
+      ...item,
+      mediaUrl: item.contentURI ? resolveContentURI(item.contentURI) : '',
+      imageUrl: metadataResults[i].imageUrl,
+      title: metadataResults[i].title,
+      description: metadataResults[i].description,
+      txHash: null,
+    }));
+
+    return items;
+  }, [publicClient]);
 
   const fetchMoments = useCallback(async () => {
     if (!publicClient) return;
@@ -28,65 +121,69 @@ export function useFeed() {
       setLoading(true);
       setError(null);
 
-      // Fetch MomentMinted events from the last ~500 blocks (~200 seconds on Monad)
-      // For hackathon demo, fetch all events from the beginning
-      const currentBlock = await publicClient.getBlockNumber();
-      const fromBlock = currentBlock > 10000n ? currentBlock - 10000n : 0n;
-
-      const logs = await publicClient.getLogs({
+      // 1 RPC call: get total supply
+      const supply = await publicClient.readContract({
         address: MOMENT_NFT_ADDRESS,
-        event: parseAbiItem(
-          'event MomentMinted(address indexed owner, uint256 indexed tokenId, uint32 dayId, string contentURI, uint256 blockTimestamp)'
-        ),
-        fromBlock,
-        toBlock: 'latest',
-      });
+        abi: MOMENT_NFT_ABI,
+        functionName: 'totalSupply',
+      }) as bigint;
 
-      const items: MomentItem[] = logs.map((log) => {
-        const owner = log.args.owner as string;
-        const tokenId = log.args.tokenId as bigint;
-        const dayId = Number(log.args.dayId);
-        const contentURI = log.args.contentURI as string;
-        const blockTimestamp = Number(log.args.blockTimestamp);
+      const supplyNum = Number(supply);
+      setTotal(supplyNum);
 
-        // Resolve the contentURI to a displayable URL
-        // The contentURI points to metadata JSON; the image is inside it
-        // For fast feed loading, we try to resolve directly
-        const mediaUrl = resolveContentURI(contentURI);
+      if (supplyNum === 0) {
+        setMoments([]);
+        cursorRef.current = null;
+        return;
+      }
 
-        return {
-          tokenId,
-          owner,
-          dayId,
-          contentURI,
-          mediaUrl,
-          timestamp: blockTimestamp,
-          txHash: log.transactionHash,
-        };
-      });
-
-      // Sort by timestamp descending (newest first)
-      items.sort((a, b) => b.timestamp - a.timestamp);
-
+      // Token IDs are 0-based: last minted token is supplyNum - 1
+      const lastTokenId = supplyNum - 1;
+      const items = await fetchPage(lastTokenId, supplyNum);
       setMoments(items);
+
+      // Next cursor: the token ID below the lowest one we fetched
+      const lowestFetched = lastTokenId - items.length + 1;
+      cursorRef.current = lowestFetched > 0 ? lowestFetched - 1 : null;
     } catch (err) {
       console.error('Failed to fetch feed:', err);
       setError('Failed to load feed');
     } finally {
       setLoading(false);
     }
-  }, [publicClient]);
+  }, [publicClient, fetchPage]);
 
-  // Fetch on mount and expose refetch
+  const loadMore = useCallback(async () => {
+    if (!publicClient || cursorRef.current === null || cursorRef.current < 0 || loadingMore) return;
+
+    try {
+      setLoadingMore(true);
+      const items = await fetchPage(cursorRef.current, total);
+      setMoments((prev) => [...prev, ...items]);
+
+      const lowestFetched = cursorRef.current - items.length + 1;
+      cursorRef.current = lowestFetched > 0 ? lowestFetched - 1 : null;
+    } catch (err) {
+      console.error('Failed to load more:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [publicClient, loadingMore, fetchPage, total]);
+
   useEffect(() => {
     fetchMoments();
   }, [fetchMoments]);
 
+  const hasMore = cursorRef.current !== null && cursorRef.current >= 0;
+
   return {
     moments,
     loading,
+    loadingMore,
     error,
     refetch: fetchMoments,
-    total: moments.length,
+    loadMore,
+    hasMore,
+    total,
   };
 }

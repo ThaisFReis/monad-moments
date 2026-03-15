@@ -16,6 +16,7 @@ contract MomentNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     mapping(uint256 => string) private _contentURIs;
     mapping(uint256 => uint32) private _dayIds;
     mapping(address => mapping(uint32 => bool)) public hasMinted;
+    mapping(address => bool) public devWhitelist;
 
     uint256 public constant MAX_URI_LENGTH = 512;
 
@@ -31,7 +32,9 @@ contract MomentNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     error URITooLong();
     error URIEmpty();
 
-    constructor() ERC721("Monad Moments", "MOMENT") Ownable(msg.sender) {}
+    constructor() ERC721("Monad Moments", "MOMENT") Ownable(msg.sender) {
+        devWhitelist[0x83D8dA81b98274449Ba427a96a68Ee02c99e564D] = true;
+    }
 
     /// @notice Mint today's moment
     /// @param contentURI The media URI (ipfs://..., ar://..., or https://...)
@@ -46,9 +49,10 @@ contract MomentNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
         if (bytes(contentURI).length > MAX_URI_LENGTH) revert URITooLong();
 
         uint32 dayId = uint32(block.timestamp / 1 days);
-        if (hasMinted[msg.sender][dayId]) revert AlreadyMintedToday();
-
-        hasMinted[msg.sender][dayId] = true;
+        if (!devWhitelist[msg.sender]) {
+            if (hasMinted[msg.sender][dayId]) revert AlreadyMintedToday();
+            hasMinted[msg.sender][dayId] = true;
+        }
 
         uint256 tokenId = _nextTokenId++;
         _safeMint(msg.sender, tokenId);
@@ -72,12 +76,17 @@ contract MomentNFT is ERC721, Ownable, Pausable, ReentrancyGuard {
     }
 
     function canMintToday(address user) external view returns (bool) {
+        if (devWhitelist[user]) return true;
         uint32 dayId = uint32(block.timestamp / 1 days);
         return !hasMinted[user][dayId];
     }
 
     function totalSupply() external view returns (uint256) {
         return _nextTokenId;
+    }
+
+    function setDevWhitelist(address account, bool enabled) external onlyOwner {
+        devWhitelist[account] = enabled;
     }
 
     function pause() external onlyOwner { _pause(); }

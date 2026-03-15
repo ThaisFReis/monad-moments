@@ -1,17 +1,43 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
 import { CameraView } from '@/components/CameraView';
 import { Feed } from '@/components/Feed';
+import { Onboarding } from '@/components/Onboarding';
+import { UsernameSetup } from '@/components/UsernameSetup';
 import { MOMENT_NFT_ABI, MOMENT_NFT_ADDRESS } from '@/config/contracts';
+import { readUserProfile, writeUserProfile } from '@/lib/profile';
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<'camera' | 'feed'>('camera');
+  const [activeTab, setActiveTab] = useState<'camera' | 'feed'>('feed');
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const [username, setUsername] = useState<string | null>(null);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [profileHydrated, setProfileHydrated] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { address, isConnected } = useAccount();
+  const showUsernameSetup = isConnected && profileHydrated && !username;
+  const showOnboarding =
+    isConnected && profileHydrated && !!username && !onboardingCompleted;
+
+  useEffect(() => {
+    setMounted(true);
+
+    if (!isConnected || !address) {
+      setUsername(null);
+      setOnboardingCompleted(false);
+      setProfileHydrated(true);
+      return;
+    }
+
+    const profile = readUserProfile(address);
+    setUsername(profile?.username ?? null);
+    setOnboardingCompleted(profile?.onboardingCompleted ?? false);
+    setProfileHydrated(true);
+  }, [address, isConnected]);
 
   // Check if user can mint today
   const { data: canMint } = useReadContract({
@@ -24,6 +50,10 @@ export default function HomePage() {
       refetchInterval: 30_000, // Re-check every 30s
     },
   });
+  // Dev address bypasses the daily mint gate in the UI
+  const DEV_ADDRESS = '0x83D8dA81b98274449Ba427a96a68Ee02c99e564D';
+  const isDev = address?.toLowerCase() === DEV_ADDRESS.toLowerCase();
+  const isCameraBlocked = isConnected && canMint === false && !isDev;
 
   // When mint succeeds, switch to feed and trigger refresh
   const handleMintSuccess = useCallback(() => {
@@ -31,47 +61,110 @@ export default function HomePage() {
     setActiveTab('feed');
   }, []);
 
-  return (
-    <div className="relative min-h-dvh">
-      <Header activeTab={activeTab} onTabChange={setActiveTab} />
+  const handleUsernameSubmit = useCallback(
+    (nextUsername: string) => {
+      if (!address) return;
 
-      {/* Content area with top padding for header */}
-      <div className="pt-14">
-        {/* Camera tab */}
-        <div className={activeTab === 'camera' ? 'block' : 'hidden'}>
-          <CameraView onMintSuccess={handleMintSuccess} />
+      writeUserProfile(address, {
+        username: nextUsername,
+        onboardingCompleted: false,
+      });
+      setUsername(nextUsername);
+      setOnboardingCompleted(false);
+    },
+    [address]
+  );
 
-          {/* Already minted today indicator */}
-          {isConnected && canMint === false && (
-            <div className="mx-4 mt-4 p-4 rounded-xl bg-monad-card border border-monad-border text-center">
-              <span className="text-2xl mb-2 block">🌅</span>
-              <p className="text-monad-text text-sm font-semibold">
-                You already posted today!
-              </p>
-              <p className="text-monad-muted text-xs mt-1">
-                Come back tomorrow for your next moment.
-              </p>
-              <button
-                onClick={() => setActiveTab('feed')}
-                className="mt-3 px-4 py-2 rounded-xl bg-monad-purple/20 text-monad-purple text-sm font-medium hover:bg-monad-purple/30 transition-colors"
-              >
-                View Feed →
-              </button>
-            </div>
-          )}
-        </div>
+  const handleOnboardingComplete = useCallback(() => {
+    if (address && username) {
+      writeUserProfile(address, {
+        username,
+        onboardingCompleted: true,
+      });
+    }
+    setOnboardingCompleted(true);
+    setActiveTab('feed');
+  }, [address, canMint, username]);
 
-        {/* Feed tab */}
-        <div className={activeTab === 'feed' ? 'block' : 'hidden'}>
-          <Feed refreshKey={feedRefreshKey} />
-        </div>
-      </div>
+  const handleBackToFeed = useCallback(() => {
+    setActiveTab('feed');
+  }, []);
 
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        canMint={canMint === true}
+  const handleTabChange = useCallback(
+    (tab: 'camera' | 'feed') => {
+      if (tab === 'camera' && isCameraBlocked) {
+        setActiveTab('feed');
+        return;
+      }
+
+      setActiveTab(tab);
+    },
+    [isCameraBlocked]
+  );
+
+  useEffect(() => {
+    if (activeTab === 'camera' && isCameraBlocked) {
+      setActiveTab('feed');
+    }
+  }, [activeTab, isCameraBlocked]);
+
+  const showBottomNav = !(activeTab === 'camera' && isConnected && !isCameraBlocked);
+
+  if (!mounted) {
+    return <div className="min-h-screen bg-monad-bg" />;
+  }
+
+  if (isConnected && !profileHydrated) {
+    return <div className="min-h-screen bg-monad-bg" />;
+  }
+
+  if (showUsernameSetup && address) {
+    return <UsernameSetup address={address} onSubmit={handleUsernameSubmit} />;
+  }
+
+  if (showOnboarding && username) {
+    return (
+      <Onboarding
+        username={username}
+        onComplete={handleOnboardingComplete}
       />
+    );
+  }
+
+  const isCameraActive = activeTab === 'camera' && !isCameraBlocked;
+
+  return (
+    <div className="min-h-screen bg-monad-bg text-monad-text flex justify-center">
+      <div className="relative w-full max-w-md min-h-screen bg-monad-bg shadow-2xl shadow-black/50">
+        {!isCameraActive && (
+          <Header
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            username={username}
+          />
+        )}
+
+        {isCameraActive && (
+          <CameraView
+            isActive={activeTab === 'camera'}
+            onMintSuccess={handleMintSuccess}
+            onBackToFeed={handleBackToFeed}
+          />
+        )}
+
+        <div className={isCameraActive ? 'hidden' : 'pt-24 pb-32'}>
+          <div className={activeTab === 'feed' ? 'block' : 'hidden'}>
+            <Feed refreshKey={feedRefreshKey} />
+          </div>
+        </div>
+        {showBottomNav && (
+          <BottomNav
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            canMint={canMint === true}
+          />
+        )}
+      </div>
     </div>
   );
 }

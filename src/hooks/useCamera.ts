@@ -19,6 +19,9 @@ export function useCamera() {
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+  const capturedUrlRef = useRef<string | null>(null);
 
   const [state, setState] = useState<CameraState>({
     isReady: false,
@@ -32,13 +35,32 @@ export function useCamera() {
   const [mode, setMode] = useState<CameraMode>('photo');
   const [facing, setFacing] = useState<CameraFacing>('environment');
 
+  useEffect(() => {
+    capturedUrlRef.current = state.capturedUrl;
+  }, [state.capturedUrl]);
+
+  const releaseStream = useCallback((stream: MediaStream | null) => {
+    stream?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const clearActiveStream = useCallback(() => {
+    if (streamRef.current) {
+      releaseStream(streamRef.current);
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, [releaseStream]);
+
   // Start camera stream
   const startCamera = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+
     try {
-      // Stop existing stream
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
+      clearActiveStream();
+      setState((prev) => ({ ...prev, isReady: false, error: null }));
 
       const constraints: MediaStreamConstraints = {
         video: {
@@ -50,20 +72,60 @@ export function useCamera() {
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      if (!mountedRef.current || requestIdRef.current !== requestId) {
+        releaseStream(stream);
+        return;
+      }
+
+      streamRef.current = stream;
+      const videoElement = videoRef.current;
+
+      if (!videoElement) {
+        streamRef.current = null;
+        releaseStream(stream);
+        return;
+      }
+
+      videoElement.srcObject = stream;
+      await videoElement.play();
+
+      if (!mountedRef.current || requestIdRef.current !== requestId) {
+        if (videoElement.srcObject === stream) {
+          videoElement.srcObject = null;
+        }
+        if (streamRef.current === stream) {
+          streamRef.current = null;
+        }
+        releaseStream(stream);
+        return;
       }
 
       setState((prev) => ({ ...prev, isReady: true, error: null }));
     } catch (err) {
+      if (!mountedRef.current || requestIdRef.current !== requestId) {
+        return;
+      }
       const message =
         err instanceof Error ? err.message : 'Camera access denied';
       setState((prev) => ({ ...prev, isReady: false, error: message }));
     }
-  }, [facing]);
+  }, [clearActiveStream, facing, releaseStream]);
+
+  const stopCamera = useCallback(() => {
+    requestIdRef.current += 1;
+
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    clearActiveStream();
+
+    setState((prev) => ({
+      ...prev,
+      isReady: false,
+      isRecording: false,
+    }));
+  }, [clearActiveStream]);
 
   // Take a photo by capturing a frame from the video stream
   const takePhoto = useCallback((): Blob | null => {
@@ -200,27 +262,21 @@ export function useCamera() {
     setFacing((prev) => (prev === 'user' ? 'environment' : 'user'));
   }, []);
 
-  // Restart camera when facing changes
+  // Cleanup on unmount (reset mountedRef on mount for React Strict Mode remount)
   useEffect(() => {
-    if (!state.capturedBlob) {
-      startCamera();
-    }
+    mountedRef.current = true;
     return () => {
-      // Cleanup on unmount
-    };
-  }, [facing]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
       }
-      if (state.capturedUrl) {
-        URL.revokeObjectURL(state.capturedUrl);
+      clearActiveStream();
+      if (capturedUrlRef.current) {
+        URL.revokeObjectURL(capturedUrlRef.current);
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearActiveStream]);
 
   return {
     videoRef,
@@ -229,6 +285,7 @@ export function useCamera() {
     setMode,
     facing,
     startCamera,
+    stopCamera,
     capture,
     discard,
     flipCamera,

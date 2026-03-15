@@ -1,15 +1,19 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';  // useWaitForTransactionReceipt removed — we use viem directly for sub-second polling
+import { createPublicClient, http, decodeEventLog } from 'viem';
+import { monadTestnet } from '@/config/wagmi';
 import { MOMENT_NFT_ABI, MOMENT_NFT_ADDRESS, HACKATHON_EVENT } from '@/config/contracts';
 import { stripExifAndCompress } from '@/lib/exif';
 import { uploadToPinata, uploadMetadata } from '@/lib/pinata';
 import { generateFilename, isEventActive } from '@/lib/utils';
+import { createHackathonComposite } from '@/lib/compositeNFT';
 
 export type MintStep =
   | 'idle'
   | 'processing'    // Stripping EXIF + compressing
+  | 'compositing'   // Generating hackathon badge artwork
   | 'uploading'     // Uploading to IPFS
   | 'confirming'    // Waiting for user to sign tx
   | 'minting'       // Transaction submitted, waiting for confirmation
@@ -64,7 +68,7 @@ export function useMint() {
    * 6. Check if hackathon badge earned
    */
   const mintMoment = useCallback(
-    async (blob: Blob, type: 'photo' | 'video', location?: { lat: number; lng: number }) => {
+    async (blob: Blob, type: 'photo' | 'video', location?: { lat: number; lng: number }, title?: string, description?: string) => {
       if (!address) {
         setState((prev) => ({ ...prev, step: 'error', error: 'Wallet not connected' }));
         return;
@@ -90,6 +94,31 @@ export function useMint() {
           processedBlob = blob;
         }
 
+        // Check if this is during the hackathon event
+        const duringEvent = isEventActive(
+          HACKATHON_EVENT.startTime,
+          HACKATHON_EVENT.endTime
+        );
+
+        // === STEP 1b: Generate hackathon composite (photo event mints only) ===
+        let imageBlob: Blob = processedBlob;
+        let animationBlob: Blob | null = null;
+
+        if (duringEvent && type === 'photo') {
+          setState((prev) => ({ ...prev, step: 'compositing', progress: 'Crafting badge artwork...' }));
+          try {
+            imageBlob = await createHackathonComposite(processedBlob, {
+              name: HACKATHON_EVENT.name,
+              dateLabel: '2026 · 03 · 15',
+              locationLabel: 'SANTA TERESA',
+            });
+            animationBlob = processedBlob;
+          } catch (compositeErr) {
+            console.warn('[compositeNFT] Composite failed, using raw photo:', compositeErr);
+            // imageBlob stays as processedBlob, animationBlob stays null — silent fallback
+          }
+        }
+
         // === STEP 2: Upload to IPFS ===
         setState((prev) => ({
           ...prev,
@@ -98,8 +127,14 @@ export function useMint() {
         }));
 
         const filename = generateFilename(type);
-        const mediaCid = await uploadToPinata(processedBlob, filename);
-        const mediaUri = `ipfs://${mediaCid}`;
+        const imageCid = await uploadToPinata(imageBlob, filename);
+        const imageUri = `ipfs://${imageCid}`;
+
+        let animationUri: string | undefined;
+        if (animationBlob) {
+          const animCid = await uploadToPinata(animationBlob, `original-${filename}`);
+          animationUri = `ipfs://${animCid}`;
+        }
 
         // Build NFT metadata
         const now = new Date();
@@ -116,12 +151,6 @@ export function useMint() {
           );
         }
 
-        // Check if this is during the hackathon event
-        const duringEvent = isEventActive(
-          HACKATHON_EVENT.startTime,
-          HACKATHON_EVENT.endTime
-        );
-
         if (duringEvent) {
           attributes.push({
             trait_type: 'Event',
@@ -130,16 +159,11 @@ export function useMint() {
         }
 
         const metadata = {
-          name: `Moment — ${now.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          })}`,
-          description: `A moment captured on Monad Moments. ${
-            duringEvent ? `📍 ${HACKATHON_EVENT.name}` : ''
-          }`,
-          image: mediaUri,
+          image: imageUri,
+          name: title || undefined,
+          description: description || undefined,
           attributes,
+          ...(animationUri ? { animation_url: animationUri } : {}),
         };
 
         const metadataCid = await uploadMetadata(metadata);
@@ -147,7 +171,7 @@ export function useMint() {
 
         setState((prev) => ({
           ...prev,
-          ipfsCid: mediaCid,
+          ipfsCid: imageCid,
         }));
 
         // === STEP 3: Submit mint transaction ===
@@ -173,9 +197,6 @@ export function useMint() {
         }));
 
         // Poll for receipt (Monad has sub-second finality)
-        const { createPublicClient, http } = await import('viem');
-        const { monadTestnet } = await import('@/config/wagmi');
-
         const client = createPublicClient({
           chain: monadTestnet,
           transport: http(),
@@ -186,16 +207,22 @@ export function useMint() {
           confirmations: 1,
         });
 
-        // Parse the MomentMinted event to get tokenId
+        // Parse the MomentMinted event to get tokenId using viem's decodeEventLog
+        // which verifies the event signature hash (topics[0]) before decoding
         let tokenId: bigint | null = null;
         for (const log of receipt.logs) {
-          if (log.topics[0]) {
-            // MomentMinted event topic — tokenId is the second indexed param
-            try {
-              tokenId = BigInt(log.topics[2] || '0');
-            } catch {
-              // Not the right log, continue
+          try {
+            const decoded = decodeEventLog({
+              abi: MOMENT_NFT_ABI,
+              data: log.data,
+              topics: log.topics,
+            });
+            if (decoded.eventName === 'MomentMinted') {
+              tokenId = (decoded.args as { tokenId: bigint }).tokenId;
+              break;
             }
+          } catch {
+            // Not a MomentMinted log, skip
           }
         }
 
@@ -207,7 +234,7 @@ export function useMint() {
             : 'Moment minted on Monad!',
           txHash,
           tokenId,
-          ipfsCid: mediaCid,
+          ipfsCid: imageCid,
           earnedBadge: duringEvent,
           error: null,
         });

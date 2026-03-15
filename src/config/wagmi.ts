@@ -24,5 +24,5 @@ export const config = getDefaultConfig({
   appName: 'Monad Moments',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
   chains: [monadTestnet],
-  ssr: true,
+  ssr: false,
 });
