@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import { useCamera } from '@/hooks/useCamera';
 import { useLocation } from '@/hooks/useLocation';
@@ -84,55 +83,6 @@ export function CameraView({ isActive, onMintSuccess, onBackToFeed }: CameraView
     a.click();
     document.body.removeChild(a);
   };
-
-  if (!isConnected) {
-    return (
-      <div className="min-h-[calc(100vh-10rem)] flex flex-col justify-between px-6 py-8 relative overflow-hidden animate-fade-in">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[140vw] h-[140vw] border border-monad-border rounded-full opacity-50 pointer-events-none" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95vw] h-[95vw] border border-neutral-800 rounded-full opacity-50 pointer-events-none" />
-
-        <div className="flex justify-between items-start z-10">
-          <div>
-            <span className="font-display text-2xl italic text-monad-text">
-              Moments.
-            </span>
-          </div>
-          <div className="text-right">
-            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-monad-muted block">
-              Network
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-monad-purple flex items-center gap-2 justify-end mt-1">
-              <span className="w-1.5 h-1.5 bg-monad-purple rounded-full animate-pulse" />
-              MONAD_L1
-            </span>
-          </div>
-        </div>
-
-        <div className="z-10 w-full">
-          <h2 className="font-display text-6xl text-monad-text leading-[0.9] mb-8">
-            Establish <br />
-            <span className="italic text-neutral-500">Identity.</span>
-          </h2>
-          <p className="font-mono text-sm text-neutral-500 mb-12 max-w-sm leading-relaxed normal-case tracking-normal">
-            Connect your cryptographic ledger to author moments, preserve memories,
-            and anchor them on-chain.
-          </p>
-          <div className="[&_button]:w-full [&_button]:flex [&_button]:justify-between [&_button]:items-center [&_button]:bg-monad-text [&_button]:text-monad-bg [&_button]:px-8 [&_button]:py-5 [&_button]:rounded-full [&_button]:font-mono [&_button]:text-xs [&_button]:uppercase [&_button]:tracking-[0.24em] [&_button]:hover:bg-neutral-300 [&_button]:transition-all">
-            <ConnectButton />
-          </div>
-        </div>
-
-        <div className="z-10 flex justify-between items-end">
-          <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-neutral-600">
-            EST. 2026 / SAO PAULO
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-neutral-600">
-            SECURED BY MATH
-          </span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black">

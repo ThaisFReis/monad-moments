@@ -1,5 +1,8 @@
 'use client';
 
+import { useAccount } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+
 interface BottomNavProps {
   activeTab: 'camera' | 'feed';
   onTabChange: (tab: 'camera' | 'feed') => void;
@@ -7,6 +10,16 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeTab, onTabChange, canMint }: BottomNavProps) {
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+
+  const handleCameraClick = () => {
+    if (!isConnected) {
+      openConnectModal?.();
+      return;
+    }
+    onTabChange('camera');
+  };
   return (
     <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 safe-area-bottom">
       <div className="flex items-center gap-2 p-1.5 rounded-full border border-monad-border bg-monad-card/80 backdrop-blur-2xl shadow-2xl shadow-black/50">
@@ -38,7 +51,7 @@ export function BottomNav({ activeTab, onTabChange, canMint }: BottomNavProps) {
         </button>
 
         <button
-          onClick={() => onTabChange('camera')}
+          onClick={handleCameraClick}
           className="relative p-3 mx-2 rounded-full bg-monad-purple text-monad-text shadow-[0_0_20px_rgba(255,69,0,0.35)] transition-transform hover:scale-105 active:scale-95"
         >
           <svg

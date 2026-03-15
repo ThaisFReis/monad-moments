@@ -103,10 +103,10 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    if (activeTab === 'camera' && isCameraBlocked) {
+    if (activeTab === 'camera' && (!isConnected || isCameraBlocked)) {
       setActiveTab('feed');
     }
-  }, [activeTab, isCameraBlocked]);
+  }, [activeTab, isConnected, isCameraBlocked]);
 
   const showBottomNav = !(activeTab === 'camera' && isConnected && !isCameraBlocked);
 
