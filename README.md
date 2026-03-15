@@ -173,10 +173,10 @@ forge create contracts/MomentNFT.sol:MomentNFT \
 
 Copy the deployed address and add to `.env.local`:
 
-> **Already deployed:** `0xe389AB80e846F5640483Be330Dc2491d4E488EEd` (Monad Testnet, 2026-03-15)
-> Tx: `0x9fd7e50b2bb69636655d07322b42662a20ac2b93e9d8fae7a4f3a21c9d329c81`
+> **Already deployed:** `0xf1b9A58d043764393Ee1C21d952961216C9F7B13` (Monad Testnet, 2026-03-15)
+> Tx: `0x56c3bae7ca3e6cac6677266403ee9fac0e7e2afb9484d5446ebee313fa71eaa6`
 ```
-NEXT_PUBLIC_MOMENT_NFT_ADDRESS=0xe389AB80e846F5640483Be330Dc2491d4E488EEd
+NEXT_PUBLIC_MOMENT_NFT_ADDRESS=0xf1b9A58d043764393Ee1C21d952961216C9F7B13
 ```
 
 ### 4. Run the app

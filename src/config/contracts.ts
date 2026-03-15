@@ -55,7 +55,7 @@ export const MOMENT_NFT_ABI = [
   },
 ] as const;
 
-export const MOMENT_NFT_DEPLOY_BLOCK = 19005866;
+export const MOMENT_NFT_DEPLOY_BLOCK = 19051903;
 
 export const MOMENT_NFT_ADDRESS = (process.env.NEXT_PUBLIC_MOMENT_NFT_ADDRESS ||
   '0x0000000000000000000000000000000000000000') as `0x${string}`;
